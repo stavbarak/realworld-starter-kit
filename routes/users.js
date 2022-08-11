@@ -1,11 +1,14 @@
 const express = require('express');
 const router = express.Router();
 const { createClient } = require('redis');
+const jwt = require('jsonwebtoken');
 
 
 const client = createClient({
     url: process.env['REDIS_URL']
 });
+
+const JWT_SECRET = process.env['JWT_SECRET'];
 
 client.on('error', (err) => {
     console.log('Error ' + err);
@@ -29,11 +32,17 @@ return await client.connect();
 router.post('/', async (req, res, next) => {
     
     // TODO perform validation
-    const { username, email, password } = req.body.user;
+    if(typeof req.body.user !== 'object') {
+        return res.status(400).json({
+            message: 'Bad request'
+        });
+    }
 
+    const { username, email, password } = req.body.user;
+    console.log(username, email, password);
     try {
         await connectRedis();
-        await client.hSet(username, 
+        await client.hSet(email, 
             'username', username, 
             'email', email, 
             'password', password);
@@ -47,6 +56,32 @@ router.post('/', async (req, res, next) => {
     }
     
 })
+
+router.post('/login', async (req, res, next) => {
+    const { email, password: providedPassword } = req.body.user;
+
+    try {
+        await connectRedis();
+        const {username, password} = await client.hGetAll(email);
+        console.log(password, providedPassword);
+        if(providedPassword !== password) {
+            return res.status(401).json({
+                message: 'Invalid credentials'
+            });
+        };
+        const token = jwt.sign({username, email}, JWT_SECRET);
+        res.status(200).json({
+            email,
+            username,
+            token
+        });
+
+    } catch (err) {
+        res.status(500).json({
+            message: 'Internal server error'
+        });
+    }
+});
 
 router.get('/', (req, res, next) => {
 
