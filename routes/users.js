@@ -31,7 +31,7 @@ return await client.connect();
     //   }
 router.post('/', async (req, res, next) => {
     
-    // TODO perform validation
+    // TODO perform validation on the object
     if(typeof req.body.user !== 'object') {
         return res.status(400).json({
             message: 'Bad request'
@@ -42,14 +42,13 @@ router.post('/', async (req, res, next) => {
     console.log(username, email, password);
     try {
         await connectRedis();
-        await client.hSet(email, 
-            'username', username, 
-            'email', email, 
-            'password', password);
+        await client.hSet(email, {username, email, password});
+
         res.status(201).json({
             message: 'User created successfully'
         });
     } catch (err) {
+        console.error('ERROR', err);
         res.status(500).json({
             message: 'Internal server error'
         });
@@ -77,14 +76,26 @@ router.post('/login', async (req, res, next) => {
         });
 
     } catch (err) {
+        console.error('ERROR', err);
         res.status(500).json({
             message: 'Internal server error'
         });
     }
 });
 
-router.get('/', (req, res, next) => {
-
+router.get('/user', (req, res, next) => {
+    const token = req.get('authorization').split(' ')[1];
+    jwt.verify(token, JWT_SECRET, async (err, decoded) => {
+        if(err) {
+            return res.status(401).json({
+                message: 'Not authenticated'
+            });
+        }
+        const {email} = decoded;
+        await connectRedis(); // TODO extract redis logic to a data plugin
+        const userData = await client.hGetAll(email);
+        res.status(200).json(userData);
+    });
 });
 
 module.exports = router;
